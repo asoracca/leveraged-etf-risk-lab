@@ -99,7 +99,11 @@ cp portfolio_values.example.csv portfolio_values.csv
 # edit portfolio_values.csv with current broker market values
 python main.py
 ```
+## Results So Far
 
+This project is currently in the initial research stage. The next step is to run the signal weekly and collect forward-test observations in the journal.
+
+Historical results will be added after the first clean backtest and baseline comparison.
 ## Journal
 
 The `journal/risk_journal.csv` file is for weekly observations.
