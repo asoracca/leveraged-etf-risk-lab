@@ -68,7 +68,19 @@ The project asks practical questions:
 - Which ticker contributes the most portfolio damage?
 
 These are not predictions. They are risk rehearsals.
+## Example Outputs
 
+### Equity and Drawdown
+![Equity and Drawdown](assets/equity_drawdown.png)
+
+### Risk Contribution
+![Risk Contribution](assets/risk_contribution.png)
+
+### Correlation Heatmap
+![Correlation Heatmap](assets/correlation_heatmap.png)
+
+### Stress Tests
+![Stress Tests](assets/stress_tests.png)
 ## Quickstart
 
 ```bash
