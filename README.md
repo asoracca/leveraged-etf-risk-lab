@@ -134,3 +134,18 @@ The common theme is learning to turn aggressive investing instincts into measura
 ## Not Financial Advice
 
 This project is for research and education. Leveraged ETFs can lose money quickly, especially over multi-day holding periods in volatile markets.
+
+## Example Outputs
+
+### Portfolio Equity and Drawdown
+![Portfolio equity and drawdown](assets/equity_drawdown.png)
+
+### Risk Contribution
+![Risk contribution](assets/risk_contribution.png)
+
+### Correlation Heatmap
+![Correlation heatmap](assets/correlation_heatmap.png)
+
+### Stress Tests
+![Stress tests](assets/stress_tests.png)
+
