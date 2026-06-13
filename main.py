@@ -16,6 +16,7 @@ from src.charts import plot_all
 from src.data import fetch_price_history
 from src.holdings import load_weights
 from src.risk import print_risk_report
+from src.rebalance import print_rebalance_report
 from src.stress import print_stress_report
 
 
@@ -29,10 +30,13 @@ def main():
     print("\n-- 2. Portfolio Risk Report ---------------------------")
     print_risk_report(prices, weights)
 
-    print("\n-- 3. Stress Tests ------------------------------------")
+    print("\n-- 3. Rebalance Decision Engine -----------------------")
+    print_rebalance_report(prices, weights)
+
+    print("\n-- 4. Stress Tests ------------------------------------")
     print_stress_report(weights)
 
-    print("\n-- 4. Charts ------------------------------------------")
+    print("\n-- 5. Charts ------------------------------------------")
     plot_all(prices, weights)
 
     print("\nDone. Outputs saved to data/.")
