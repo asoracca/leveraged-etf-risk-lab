@@ -11,7 +11,8 @@ from src.config import BENCHMARKS, DEFAULT_WEIGHTS, THEMES, TICKERS
 
 
 def normalize_weights(weights: dict[str, float] | None = None, available: list[str] | None = None) -> pd.Series:
-    weights = weights or DEFAULT_WEIGHTS
+    if weights is None:
+        weights = DEFAULT_WEIGHTS
     available = available or list(weights.keys())
     filtered = {ticker: weights[ticker] for ticker in weights if ticker in available}
     series = pd.Series(filtered, dtype=float)

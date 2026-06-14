@@ -13,6 +13,7 @@ This project was built from a real investing problem: managing a portfolio tilte
 - Measures portfolio beta vs SPY, QQQ, and SOXX
 - Estimates annualized return, volatility, Sharpe ratio, and max drawdown
 - Identifies which holdings contribute the most risk
+- Groups holdings into theme-level exposure buckets
 - Detects crowded/correlated exposure
 - Runs scenario stress tests
 - Generates rule-based rebalance recommendations
@@ -57,7 +58,8 @@ Core metrics:
 - Max drawdown
 - Beta vs SPY, QQQ, and SOXX
 - Correlation matrix
-- Risk contribution by holding
+- Ticker-level risk contribution
+- Theme-level exposure and risk contribution
 - Scenario stress tests
 
 ## Rebalance Decision Engine
@@ -82,6 +84,10 @@ The rules are intentionally simple and transparent. They are not trading signals
 ### Risk Contribution
 
 ![Risk contribution](assets/risk_contribution.png)
+
+### Theme Exposure
+
+![Theme exposure](assets/theme_exposure.png)
 
 ### Correlation Heatmap
 

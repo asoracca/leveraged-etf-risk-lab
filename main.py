@@ -11,7 +11,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from pathlib import Path
-
+from src.exposure import print_theme_exposure, plot_theme_exposure
 from src.charts import plot_all
 from src.data import fetch_price_history
 from src.holdings import load_weights
@@ -29,7 +29,9 @@ def main():
 
     print("\n-- 2. Portfolio Risk Report ---------------------------")
     print_risk_report(prices, weights)
-
+    print("\n-- 3. Theme Exposure ----------------------------------")
+    print_theme_exposure(prices, weights)
+    plot_theme_exposure(prices, weights)
     print("\n-- 3. Rebalance Decision Engine -----------------------")
     print_rebalance_report(prices, weights)
 
