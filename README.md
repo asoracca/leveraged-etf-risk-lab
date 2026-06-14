@@ -6,24 +6,25 @@ A quantitative risk dashboard for a concentrated portfolio of leveraged ETFs and
 
 Am I being paid for taking aggressive leveraged ETF risk, or am I accidentally stacking the same trade across semiconductors, AI, space, biotech, and high-beta growth?
 
-This project was built from a real personal investing problem: I hold a portfolio tilted toward leveraged ETFs and high-volatility themes. The goal is not to make the portfolio look safer than it is. The goal is to measure the risk clearly enough to make better decisions.
+This project was built from a real investing problem: managing a portfolio tilted toward leveraged ETFs and volatile themes. The goal is not to make the portfolio look safer than it is. The goal is to measure risk clearly enough to make better decisions.
 
-## Why This Project Exists
+## What This Does
+
+- Measures portfolio beta vs SPY, QQQ, and SOXX
+- Estimates annualized return, volatility, Sharpe ratio, and max drawdown
+- Identifies which holdings contribute the most risk
+- Detects crowded/correlated exposure
+- Runs scenario stress tests
+- Generates rule-based rebalance recommendations
+- Tracks weekly observations in a decision journal
+
+## Why Leveraged ETFs Need Risk Monitoring
 
 Leveraged ETFs can be useful tactical instruments, but they are path-dependent. A 2x or 3x ETF does not simply deliver two or three times the long-term return of the underlying index. Daily reset, volatility decay, drawdowns, and correlated exposure can dominate the result.
 
-This project turns a risky personal portfolio into a quant research lab:
-
-- measure portfolio beta vs SPY, QQQ, and SOXX
-- estimate annualized volatility and max drawdown
-- identify which holdings contribute the most risk
-- detect crowded/correlated exposure
-- run simple stress tests
-- keep a weekly decision journal
+This project treats leveraged ETFs as a portfolio risk problem, not just a return opportunity.
 
 ## Example Universe
-
-The default ticker list is based on my current leveraged ETF themes:
 
 | Ticker | Theme |
 |---|---|
@@ -39,7 +40,9 @@ The default ticker list is based on my current leveraged ETF themes:
 | NBIG | 2x Nebius exposure |
 | LITX | 2x lithium exposure |
 
-You can edit tickers in `src/config.py`. For real weights, copy `portfolio_values.example.csv` to `portfolio_values.csv` and update the market values from your broker.
+Tickers can be edited in `src/config.py`.
+
+For real portfolio weights, copy `portfolio_values.example.csv` to `portfolio_values.csv` and update the market values. The live `portfolio_values.csv` file is gitignored.
 
 ## Methodology
 
@@ -47,40 +50,47 @@ The dashboard uses daily adjusted close data from Yahoo Finance.
 
 Core metrics:
 
-- log returns
-- annualized return
-- annualized volatility
+- Log returns
+- Annualized return
+- Annualized volatility
 - Sharpe ratio
-- max drawdown
-- beta vs SPY, QQQ, and SOXX
-- correlation matrix
-- risk contribution by holding
-- scenario stress tests
+- Max drawdown
+- Beta vs SPY, QQQ, and SOXX
+- Correlation matrix
+- Risk contribution by holding
+- Scenario stress tests
 
-## Stress Tests
+## Rebalance Decision Engine
 
-The project asks practical questions:
+`src/rebalance.py` generates simple risk-based recommendations:
 
-- What if SPY drops 5%?
-- What if QQQ drops 8%?
-- What if semiconductors drop 10%?
-- What if every leveraged position has a bad day at once?
-- Which ticker contributes the most portfolio damage?
+| Action | Meaning |
+|---|---|
+| HOLD | Risk is currently within limits |
+| TRIM | One position contributes too much portfolio risk |
+| DELEVERAGE | Portfolio beta or volatility is too high |
+| RISK_OFF | Drawdown has crossed the risk limit |
 
-These are not predictions. They are risk rehearsals.
+The rules are intentionally simple and transparent. They are not trading signals. They are guardrails for risk management.
+
 ## Example Outputs
 
-### Equity and Drawdown
-![Equity and Drawdown](assets/equity_drawdown.png)
+### Portfolio Equity and Drawdown
+
+![Portfolio equity and drawdown](assets/equity_drawdown.png)
 
 ### Risk Contribution
-![Risk Contribution](assets/risk_contribution.png)
+
+![Risk contribution](assets/risk_contribution.png)
 
 ### Correlation Heatmap
-![Correlation Heatmap](assets/correlation_heatmap.png)
+
+![Correlation heatmap](assets/correlation_heatmap.png)
 
 ### Stress Tests
-![Stress Tests](assets/stress_tests.png)
+
+![Stress tests](assets/stress_tests.png)
+
 ## Quickstart
 
 ```bash
@@ -88,64 +98,3 @@ git clone https://github.com/asoracca/leveraged-etf-risk-lab.git
 cd leveraged-etf-risk-lab
 pip install -r requirements.txt
 python main.py
-```
-
-Outputs are saved to `data/`.
-
-To use real portfolio weights:
-
-```bash
-cp portfolio_values.example.csv portfolio_values.csv
-# edit portfolio_values.csv with current broker market values
-python main.py
-```
-## Results So Far
-
-This project is currently in the initial research stage. The next step is to run the signal weekly and collect forward-test observations in the journal.
-
-Historical results will be added after the first clean backtest and baseline comparison.
-## Journal
-
-The `journal/risk_journal.csv` file is for weekly observations.
-
-The goal is to track:
-
-- current exposure
-- largest risk contributor
-- portfolio beta
-- portfolio drawdown
-- decision made
-- what happened 1-4 weeks later
-
-That turns this from a dashboard into a live research process.
-
-## Personal Context
-
-I am building a quant portfolio around markets I actually touch: leveraged ETFs, options premium, space stocks, semiconductors, AI, and high-volatility thematic exposure.
-
-This project is the risk layer. It connects:
-
-- SOXL Vol Surface: options premium and volatility
-- New Space Radar: catalyst-driven equity signals
-- Leveraged ETF Risk Lab: portfolio-level risk, leverage, and drawdown control
-
-The common theme is learning to turn aggressive investing instincts into measurable, testable, risk-aware systems.
-
-## Not Financial Advice
-
-This project is for research and education. Leveraged ETFs can lose money quickly, especially over multi-day holding periods in volatile markets.
-
-## Example Outputs
-
-### Portfolio Equity and Drawdown
-![Portfolio equity and drawdown](assets/equity_drawdown.png)
-
-### Risk Contribution
-![Risk contribution](assets/risk_contribution.png)
-
-### Correlation Heatmap
-![Correlation heatmap](assets/correlation_heatmap.png)
-
-### Stress Tests
-![Stress tests](assets/stress_tests.png)
-
