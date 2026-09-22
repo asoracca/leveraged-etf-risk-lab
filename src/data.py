@@ -8,13 +8,14 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
 
 from src.config import BENCHMARKS, TICKERS
 
 
 def fetch_price_history(period: str = "2y") -> pd.DataFrame:
     """Fetch adjusted close prices for portfolio tickers and benchmarks."""
+    import yfinance as yf
+
     symbols = TICKERS + BENCHMARKS
     print(f"Fetching prices for {symbols}...")
 
@@ -34,7 +35,7 @@ def fetch_price_history(period: str = "2y") -> pd.DataFrame:
     if isinstance(prices.columns, pd.MultiIndex):
         prices.columns = prices.columns.get_level_values(0)
 
-    prices = prices.dropna(axis=1, how="all").ffill().dropna(how="all")
+    prices = prices.dropna(how="all")
     Path("data").mkdir(exist_ok=True)
     prices.to_csv("data/prices.csv")
 
@@ -44,5 +45,6 @@ def fetch_price_history(period: str = "2y") -> pd.DataFrame:
 
 
 def compute_returns(prices: pd.DataFrame) -> pd.DataFrame:
-    """Compute daily log returns."""
-    return np.log(prices / prices.shift(1)).replace([np.inf, -np.inf], np.nan).dropna(how="all")
+    """Daily simple returns with no implicit filling."""
+    from src.risk import simple_returns
+    return simple_returns(prices)

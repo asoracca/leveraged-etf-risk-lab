@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 from src.data import fetch_price_history
 from src.holdings import load_weights
-from src.risk import normalize_weights, risk_contribution
+from src.risk import normalize_weights, risk_contribution, aligned_returns
 
 
 THEME_BUCKETS = {
@@ -37,7 +37,7 @@ def compute_theme_exposure(prices, weights=None):
     if weights is None:
         weights = load_weights()
     weights = normalize_weights(weights)
-    returns = prices.pct_change().dropna(how="all")
+    returns, weights, _ = aligned_returns(prices, weights)
     ticker_risk = risk_contribution(returns, weights)
 
     rows = []

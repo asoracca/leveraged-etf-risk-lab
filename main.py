@@ -4,9 +4,6 @@ main.py
 Run the leveraged ETF risk dashboard.
 """
 
-import warnings
-warnings.filterwarnings("ignore")
-
 from pathlib import Path
 
 from src.charts import plot_all

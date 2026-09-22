@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
-from src.risk import compute_summary, concentration_table, correlation_matrix
+from src.risk import compute_summary, concentration_table, correlation_matrix, drawdown_series
 from src.stress import run_stress_tests
 
 
@@ -28,7 +28,7 @@ def _save(filename: str) -> None:
 def plot_equity_and_drawdown(prices, weights=None):
     _, _, port = compute_summary(prices, weights)
     equity = (1 + port).cumprod()
-    drawdown = equity / equity.cummax() - 1
+    drawdown = drawdown_series(port)
 
     fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
     fig.suptitle("Leveraged ETF Portfolio Equity and Drawdown", fontweight="bold")
@@ -87,7 +87,7 @@ def plot_stress_tests(weights=None):
     plt.barh(results["scenario"], results["portfolio_return"], color="#A32D2D", alpha=0.85)
     plt.axvline(0, color="black", linestyle="--", alpha=0.35)
     plt.title("Scenario Stress Tests")
-    plt.xlabel("Estimated Portfolio Return")
+    plt.xlabel("Assumed One-Day Portfolio Return")
     plt.gca().xaxis.set_major_formatter(lambda x, _: f"{x:.0%}")
     plt.grid(True, axis="x", alpha=0.25)
     _save("stress_tests.png")
