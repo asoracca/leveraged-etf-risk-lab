@@ -4,9 +4,6 @@ main.py
 Run the leveraged ETF risk dashboard.
 """
 
-import warnings
-warnings.filterwarnings("ignore")
-
 from pathlib import Path
 
 from src.charts import plot_all
@@ -32,7 +29,7 @@ def main():
     print_theme_exposure(prices, weights)
     plot_theme_exposure(prices, weights)
 
-    print("\n-- 4. Rebalance Decision Engine -----------------------")
+    print("\n-- 4. Educational Rule Evaluations -----------------------")
     print_rebalance_report(prices, weights)
 
     print("\n-- 5. Stress Tests ------------------------------------")

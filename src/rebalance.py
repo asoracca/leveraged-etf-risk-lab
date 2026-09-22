@@ -1,135 +1,56 @@
-"""
-rebalance.py
-------------
-Decision rules for a leveraged ETF portfolio.
-
-This module does not place trades. It gives risk-based recommendations:
-  HOLD        risk is acceptable
-  TRIM        one position contributes too much portfolio risk
-  DELEVERAGE  portfolio beta/volatility is too high
-  RISK_OFF    drawdown is beyond the allowed threshold
-"""
-
+"""Educational threshold evaluations; no action labels or trade recommendations."""
 from pathlib import Path
+import numpy as np
 import pandas as pd
+from src.risk import compute_summary
 
-from src.data import fetch_price_history
-from src.holdings import load_weights
-from src.risk import compute_summary, concentration_table
+RULES = {"max_single_risk_contribution": .35, "max_beta_qqq": 2.50,
+         "max_beta_spy": 2.25, "max_annual_vol": .75, "max_drawdown": -.20}
 
 
-RULES = {
-    "max_single_risk_contribution": 0.35,
-    "max_beta_qqq": 2.50,
-    "max_beta_spy": 2.25,
-    "max_annual_vol": 0.75,
-    "max_drawdown": -0.20,
-}
+def evaluate_rules(summary, risk_shares, rules=None):
+    limits = dict(RULES)
+    if rules is not None:
+        if set(rules) - set(limits):
+            raise ValueError("Unknown rule threshold")
+        limits.update(rules)
+    if not np.isfinite(list(limits.values())).all():
+        raise ValueError("Thresholds must be finite")
+    inputs = [("max_drawdown", summary['max_drawdown'], '<=', limits['max_drawdown']),
+              ("annual_vol", summary['annual_vol'], '>=', limits['max_annual_vol']),
+              ("beta_SPY", summary['betas'].get('SPY'), '>=', limits['max_beta_spy']),
+              ("beta_QQQ", summary['betas'].get('QQQ'), '>=', limits['max_beta_qqq'])]
+    inputs += [(f"risk_share_{ticker}", value, '>=', limits['max_single_risk_contribution'])
+               for ticker, value in risk_shares.items()]
+    rows = []
+    for metric, value, op, threshold in inputs:
+        known = value is not None and np.isfinite(value)
+        triggered = bool(value <= threshold if op == '<=' else value >= threshold) if known else None
+        rows.append({'metric': metric, 'value': float(value) if known else None,
+                     'operator': op, 'threshold': threshold, 'triggered': triggered,
+                     'status': 'unavailable' if triggered is None else ('threshold_met' if triggered else 'threshold_not_met'),
+                     'trigger': f'{metric} {op} {threshold}',
+                     'purpose': 'educational threshold, not a forecast or trade instruction'})
+    return rows
 
 
 def generate_rebalance_recommendations(prices, weights=None):
-    weights = weights or load_weights()
-    summary, risk_contrib, _ = compute_summary(prices, weights)
-    table = concentration_table(prices, weights)
-
-    recommendations = []
-
-    max_dd = summary["max_drawdown"]
-    annual_vol = summary["annual_vol"]
-    beta_spy = summary["betas"].get("SPY")
-    beta_qqq = summary["betas"].get("QQQ")
-
-    portfolio_flags = []
-
-    if max_dd <= RULES["max_drawdown"]:
-        portfolio_flags.append(
-            f"Drawdown is {max_dd:.1%}, below risk limit of {RULES['max_drawdown']:.0%}"
-        )
-
-    if annual_vol >= RULES["max_annual_vol"]:
-        portfolio_flags.append(
-            f"Annual volatility is {annual_vol:.1%}, above limit of {RULES['max_annual_vol']:.0%}"
-        )
-
-    if beta_spy is not None and beta_spy >= RULES["max_beta_spy"]:
-        portfolio_flags.append(
-            f"Beta vs SPY is {beta_spy:.2f}, above limit of {RULES['max_beta_spy']:.2f}"
-        )
-
-    if beta_qqq is not None and beta_qqq >= RULES["max_beta_qqq"]:
-        portfolio_flags.append(
-            f"Beta vs QQQ is {beta_qqq:.2f}, above limit of {RULES['max_beta_qqq']:.2f}"
-        )
-
-    for _, row in table.iterrows():
-        ticker = row["ticker"]
-        weight = row["weight"]
-        risk = row["risk_contribution"]
-        theme = row["theme"]
-
-        action = "HOLD"
-        reason = "Risk contribution is within limits."
-
-        if risk >= RULES["max_single_risk_contribution"]:
-            action = "TRIM"
-            reason = (
-                f"{ticker} contributes {risk:.1%} of portfolio risk, "
-                f"above limit of {RULES['max_single_risk_contribution']:.0%}."
-            )
-
-        if portfolio_flags and action == "HOLD":
-            action = "DELEVERAGE"
-            reason = "Portfolio-level risk is elevated: " + "; ".join(portfolio_flags)
-
-        if max_dd <= RULES["max_drawdown"]:
-            action = "RISK_OFF"
-            reason = (
-                f"Portfolio drawdown is {max_dd:.1%}. "
-                "Risk-off mode triggered before adding exposure."
-            )
-
-        recommendations.append({
-            "ticker": ticker,
-            "theme": theme,
-            "weight": round(weight, 4),
-            "risk_contribution": round(risk, 4),
-            "action": action,
-            "reason": reason,
-        })
-
-    df = pd.DataFrame(recommendations)
-
-    Path("data").mkdir(exist_ok=True)
-    df.to_csv("data/rebalance_recommendations.csv", index=False)
-
-    return df, summary
+    """Compatibility entry point; returns rule evaluations, not recommendations."""
+    if weights is None:
+        from src.holdings import load_weights
+        weights = load_weights()
+    summary, shares, _ = compute_summary(prices, weights)
+    return pd.DataFrame(evaluate_rules(summary, shares)), summary
 
 
 def print_rebalance_report(prices, weights=None):
-    recommendations, summary = generate_rebalance_recommendations(prices, weights)
-
-    print("\n" + "=" * 70)
-    print("  REBALANCE DECISION ENGINE")
-    print("=" * 70)
-
-    print(f"  Annual volatility: {summary['annual_vol']:.1%}")
-    print(f"  Max drawdown:      {summary['max_drawdown']:.1%}")
-
-    for benchmark, beta in summary["betas"].items():
-        print(f"  Beta vs {benchmark}:     {beta:.2f}")
-
-    print("\n  Recommendations:")
-    print(
-        recommendations[
-            ["ticker", "weight", "risk_contribution", "action", "reason"]
-        ].to_string(index=False)
-    )
-
-    print("\nSaved: data/rebalance_recommendations.csv")
-    print("=" * 70)
+    rows, _ = generate_rebalance_recommendations(prices, weights)
+    print('\nEDUCATIONAL RULE EVALUATIONS — thresholds are assumptions')
+    print(rows[['metric', 'value', 'operator', 'threshold', 'status']].to_string(index=False))
+    Path('data').mkdir(exist_ok=True)
+    rows.to_csv('data/rule_evaluations.csv', index=False)
 
 
-if __name__ == "__main__":
-    prices = fetch_price_history(period="2y")
-    weights = load_weights()
-    print_rebalance_report(prices, weights)
+if __name__ == '__main__':
+    from src.data import fetch_price_history
+    print_rebalance_report(fetch_price_history())

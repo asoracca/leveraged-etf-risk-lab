@@ -1,0 +1,7 @@
+{
+  "input_type": "synthetic",
+  "dates": ["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"],
+  "prices": {"A": [100, 110, 99, 108.9], "B": [100, 100, 100, 100], "SPY": [100, 105, 99.75, 104.7375]},
+  "weights": {"A": 0.5, "B": 0.5},
+  "expected": {"returns": [0.05, -0.05, 0.05], "total_return": 0.047375, "max_drawdown": -0.05, "beta": 1.0, "daily_variance": 0.0033333333333333335, "annual_variance": 0.84, "risk_shares": {"A": 1, "B": 0}, "buy_and_hold_total_return": 0.0445}
+}

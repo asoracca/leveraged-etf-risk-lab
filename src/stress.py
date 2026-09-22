@@ -4,6 +4,7 @@ stress.py
 Simple scenario stress tests for leveraged ETF portfolios.
 """
 
+import numpy as np
 import pandas as pd
 
 from src.config import DEFAULT_WEIGHTS, THEMES
@@ -66,39 +67,34 @@ SCENARIOS = {
 }
 
 
-def run_stress_tests(weights: dict[str, float] | None = None) -> pd.DataFrame:
-    w = normalize_weights(weights or DEFAULT_WEIGHTS)
+def run_stress_tests(weights=None, scenarios=None):
+    """Deterministic one-session shocks; every held symbol needs an assumption."""
+    w = normalize_weights(weights)
     rows = []
-
-    for scenario_name, moves in SCENARIOS.items():
-        weighted_loss = 0.0
-        worst_ticker = None
-        worst_contribution = 0.0
-
-        for ticker, weight in w.items():
-            move = moves.get(ticker, 0.0)
-            contribution = weight * move
-            weighted_loss += contribution
-            if contribution < worst_contribution:
-                worst_ticker = ticker
-                worst_contribution = contribution
-
-        rows.append({
-            "scenario": scenario_name,
-            "portfolio_return": weighted_loss,
-            "worst_contributor": worst_ticker,
-            "worst_contributor_theme": THEMES.get(worst_ticker, ""),
-            "worst_contribution": worst_contribution,
-        })
-
-    return pd.DataFrame(rows).sort_values("portfolio_return")
+    for name, moves in (SCENARIOS if scenarios is None else scenarios).items():
+        if not set(w.index).issubset(moves):
+            raise ValueError(f"Missing scenario shocks: {set(w.index) - set(moves)}")
+        shocks = pd.Series(moves).reindex(w.index)
+        if not np.isfinite(shocks).all() or (shocks < -1).any():
+            raise ValueError("Shocks must be finite simple returns >= -1")
+        contributions = w * shocks
+        worst = contributions.idxmin()
+        rows.append({"scenario": name, "kind": "deterministic assumed one-day stress",
+                     "portfolio_return": float(contributions.sum()),
+                     "weights": w.to_dict(), "assumed_shocks": shocks.to_dict(),
+                     "contributions": contributions.to_dict(),
+                     "formula": "sum(weight[i] * assumed_shock[i])",
+                     "worst_contributor": worst,
+                     "worst_contributor_theme": THEMES.get(worst, "Unclassified"),
+                     "worst_contribution": float(contributions[worst])})
+    return pd.DataFrame(rows).sort_values("portfolio_return") if rows else pd.DataFrame()
 
 
 def print_stress_report(weights: dict[str, float] | None = None) -> None:
     results = run_stress_tests(weights)
 
     print("\n" + "=" * 70)
-    print("  STRESS TESTS")
+    print("  DETERMINISTIC STRESS ASSUMPTIONS — NOT CALIBRATED FORECASTS")
     print("=" * 70)
     printable = results.copy()
     for col in ["portfolio_return", "worst_contribution"]:
