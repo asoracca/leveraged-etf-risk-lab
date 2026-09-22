@@ -71,3 +71,78 @@ A contributes all volatility and B zero. Buy-and-hold final wealth is
 The pinned core uses [pandas 2.2.3 fractional changes](https://pandas.pydata.org/pandas-docs/version/2.2/reference/api/pandas.DataFrame.pct_change.html)
 with `fill_method=None`, and sample covariance consistent with the
 [NumPy 2.2 covariance convention](https://numpy.org/doc/2.2/reference/generated/numpy.cov.html).
+
+## Daily-reset leverage model
+
+`src.optimal_leverage.simulate_daily_reset` models each day's fund return as
+`L*r - annual_fee/N - max(L-1,0)*annual_financing/N`, with `N=252` by default.
+Fees apply to NAV, financing to borrowed exposure. These are constant nominal
+annual costs accrued evenly per trading observation; weekends, tax, dividends
+beyond underlying total returns, swaps, tracking error and changing spreads are
+not separately modeled. For leverage below one, idle capital earns zero. Leverage
+must be nonnegative; inverse funds are outside this model.
+
+A modeled return at or below -100% raises by default. Explicit `liquidate` floors
+wealth at zero permanently; it cannot recover on a later positive day. Invalid
+underlying returns (nonfinite or below -100%) always raise. The leverage curve
+calls this same model, using liquidation. Its historical optimum is in-sample.
+
+Flat `[0,0]` and volatile `[.1,-1/11]` underlying paths both finish at 1. With zero
+costs, the 3x model finishes at `1` and `1.3*(1-3/11)=.9454545...` respectively.
+The difference comes from the sequence of daily resets and multiplicative
+compounding, not three times the underlying terminal return. Costed versions are
+included separately. This toy example demonstrates dispersion across paths;
+it does not claim that merely permuting a fixed set of returns changes terminal
+wealth in this constant-leverage, constant-cost model.
+
+## Scenarios, exposure and rules
+
+Stress outputs are assumed one-day constituent shocks and `sum(w*shock)`;
+all held symbols need a shock. Names such as “QQQ -8%” are narrative assumptions,
+not conditional estimates calibrated from data. No scenario has an assigned
+probability. The seeded normal draw in the workbench is illustrative, not fitted.
+
+Look-through maps are explicit assumed factor notional per unit capital.
+50% in synthetic Growth_2x and 50% in Innovation_3x gives `0.5*2+0.5*3=2.5`
+units of the **same** growth factor per unit initial capital. Fund names and
+portfolio weight bars cannot establish diversification. Factor maps can overlap;
+adding unrelated factor categories is not necessarily a gross exposure estimate.
+The legacy theme map is a coarse grouping, not constituent-level look-through.
+
+Every rule prints its metric, observed input, operator, threshold and boolean
+result. Equality triggers (`>=` or `<=`). Missing or undefined metrics yield
+`unavailable`, never a pass. Default thresholds are illustrative assumptions,
+not optimized limits or trade instructions. Stress weights and factor bars use
+initial capital allocations even when historical return mode is buy-and-hold.
+
+## Optional HMM boundaries
+
+`src.regime_detection` is separate from `main.py` and the demo. Install
+`requirements-regimes.txt` explicitly. No runtime auto-install or fallback is
+performed. Training requires at least 30 finite feature rows and fits scaling
+and two-state Gaussian HMM parameters only on those rows. Labels are ordered by
+fitted mean realized volatility: **inferred low-vol** and **inferred high-vol**,
+not bull/bear market predictions. Training probabilities are smoothed, retrospective
+in-sample descriptions. Training features use log returns and trailing 5-session
+volatility; these logs are not fed into simple-return portfolio compounding.
+
+Evaluation must begin strictly after training ends. Frozen-model evaluation
+recomputes each prefix ending at the current date, taking only that endpoint's
+posterior, so later observations cannot smooth earlier evaluation labels.
+Features must themselves be causal (use `make_features` before splitting).
+This clear reference implementation costs O(n²) for evaluation. It does not
+provide a validated timing strategy, forecast or calibrated probabilities of
+future returns. The former hindsight regime-filtered backtest was removed.
+A model may stop at its iteration limit; reported convergence alone does not
+establish fit quality or economic relevance.
+
+See the [hmmlearn 0.3.3 API](https://hmmlearn.readthedocs.io/en/0.3.3/api.html)
+for fitting and posterior inference semantics.
+
+## Standalone rolling and account reports
+
+Rolling Sharpe uses the same explicit zero risk-free default and simple portfolio
+returns. Sortino uses root mean squared negative excess returns over **all**
+observations in each window. VaR is a historical quantile, not a future loss bound.
+The positions-CSV tool reports cost-basis gains, which are not peak-to-trough
+drawdowns. These standalone tools are not run by the default runner or demo.

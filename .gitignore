@@ -7,3 +7,10 @@ data/*.csv
 data/*.html
 portfolio_values.csv
 .DS_Store
+
+# Local account exports and generated reports
+*Positions*.csv
+private/
+reports/
+data/*.json
+.mplconfig/

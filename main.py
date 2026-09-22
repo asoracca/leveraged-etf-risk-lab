@@ -29,7 +29,7 @@ def main():
     print_theme_exposure(prices, weights)
     plot_theme_exposure(prices, weights)
 
-    print("\n-- 4. Rebalance Decision Engine -----------------------")
+    print("\n-- 4. Educational Rule Evaluations -----------------------")
     print_rebalance_report(prices, weights)
 
     print("\n-- 5. Stress Tests ------------------------------------")

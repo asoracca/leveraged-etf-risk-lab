@@ -32,12 +32,14 @@ def load_weights() -> dict[str, float]:
     if missing:
         raise ValueError(f"portfolio_values.csv is missing columns: {sorted(missing)}")
 
-    df = df.dropna(subset=["ticker", "market_value"]).copy()
+    if df.empty or df[list(required)].isna().any().any():
+        raise ValueError("Holdings must have nonempty tickers and finite nonnegative values")
     df["ticker"] = df["ticker"].str.upper().str.strip()
-    df["market_value"] = pd.to_numeric(df["market_value"], errors="coerce")
-    df = df.dropna(subset=["market_value"])
-    df = df[df["market_value"] > 0]
-
+    if df["ticker"].eq("").any():
+        raise ValueError("Empty holding ticker")
+    df["market_value"] = pd.to_numeric(df["market_value"], errors="raise")
+    from src.risk import normalize_weights
+    # Validate every row before grouping so a negative row cannot be hidden.
+    normalize_weights(dict(enumerate(df["market_value"])))
     grouped = df.groupby("ticker")["market_value"].sum()
-    weights = grouped / grouped.sum()
-    return weights.to_dict()
+    return normalize_weights(grouped).to_dict()

@@ -32,7 +32,7 @@ THEME = {
     "APLX": "Semis/AI", "NBIG": "Semis/AI", "LITX": "Semis/AI", "QLD": "Semis/AI",
     "ASTX": "Space", "RKLX": "Space", "KORU": "Korea",
 }
-DRAWDOWN_RULE = -30.0     # RISK_OFF below this per-position gain %
+GAIN_LOSS_THRESHOLD = -30.0  # cost-basis gain %, not peak-to-trough drawdown
 
 
 # ----------------------------------------------------------------------
@@ -142,7 +142,7 @@ def report_account(name: str, h: pd.DataFrame, cash: float) -> None:
     print("-" * 62)
     print(f"  {'Symbol':<7}{'Theme':<11}{'Value':>11}{'% gross':>9}{'Gain%':>8}")
     for _, r in h.iterrows():
-        flag = "  ⚠<-30%" if (not np.isnan(r["gain_pct"]) and r["gain_pct"] < DRAWDOWN_RULE) else ""
+        flag = "  ⚠<-30%" if (not np.isnan(r["gain_pct"]) and r["gain_pct"] < GAIN_LOSS_THRESHOLD) else ""
         print(f"  {r['symbol']:<7}{r['theme']:<11}${r['mkt_val']:>9,.0f}"
               f"{r['mkt_val']/gross*100:>8.1f}%{r['gain_pct']:>7.0f}%{flag}")
 
@@ -159,18 +159,17 @@ def report_account(name: str, h: pd.DataFrame, cash: float) -> None:
     print("  Risk check (context only — no buy/sell advice):")
     print(f"    • Largest single position: {top['symbol']} = "
           f"{top['mkt_val']/equity*100:.0f}% of equity "
-          f"(your 1–2%/trade rule is about notional-adjusted risk — this dwarfs it).")
+          f"(capital concentration; not a maximum loss estimate).")
     biggest_theme = theme.index[0]
     if theme.iloc[0] / gross > 0.50:
         print(f"    • {biggest_theme} is {theme.iloc[0]/gross*100:.0f}% of the book "
               f"→ this is largely ONE bet, not diversified.")
-    dd = h[h["gain_pct"] < DRAWDOWN_RULE]["symbol"].tolist()
+    dd = h[h["gain_pct"] < GAIN_LOSS_THRESHOLD]["symbol"].tolist()
     if dd:
-        print(f"    • Past your −30% RISK_OFF line (per position): {', '.join(dd)}.")
+        print(f"    • Cost-basis gain < -30% threshold (not drawdown): {', '.join(dd)}.")
     if cash < -1:
         print(f"    • Margin debit of ${-cash:,.0f} — leverage stacked on leverage.")
-    print("    Reminder of YOUR rules: 1–2% risk/trade, RISK_OFF below −30%, "
-          "leveraged ETFs are short-hold.")
+    print("    Thresholds are illustrative assumptions; no trade action is implied.")
     print("=" * 62)
 
 

@@ -18,9 +18,6 @@ Or import:
     from src.rolling_sharpe import compute_rolling_sharpe, plot_rolling_sharpe
 """
 
-import warnings
-warnings.filterwarnings("ignore")
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -29,16 +26,15 @@ import yfinance as yf
 from pathlib import Path
 
 
-RISK_FREE_RATE = 0.053   # annualised US T-bill rate (~5.3%)
+RISK_FREE_RATE = 0.0   # explicit effective annual assumption; not a fetched rate
 
 
 def load_portfolio(csv_path="portfolio_values.csv"):
     """
     Load portfolio from CSV (ticker, market_value).
-    Excludes USD cash and computes weight of each position.
+    USD is an ETF symbol here, not a cash marker.
     """
     df = pd.read_csv(csv_path)
-    df = df[df["ticker"] != "USD"].copy()   # exclude cash
     df["weight"] = df["market_value"] / df["market_value"].sum()
     return df
 
@@ -62,29 +58,14 @@ def fetch_portfolio_history(portfolio_df, period="1y"):
     prices.columns = [c.replace("Close_", "") for c in prices.columns]
     prices.index = pd.to_datetime(prices.index).tz_localize(None)
 
-    # Only keep tickers we successfully fetched
-    available = [t for t in tickers if t in prices.columns]
-    missing   = [t for t in tickers if t not in prices.columns]
-    if missing:
-        print(f"  Warning: couldn't fetch {missing} — excluded from analysis")
-
-    prices = prices[available].ffill().dropna(how="all")
-    daily_returns = prices.pct_change().dropna(how="all")
-
-    # Re-normalise weights for available tickers
-    total_weight = sum(weights[t] for t in available)
-    norm_weights = {t: weights[t] / total_weight for t in available}
-
-    # Weighted portfolio daily return
-    portfolio_returns = sum(daily_returns[t] * norm_weights[t] for t in available)
-    portfolio_returns.name = "portfolio_return"
-
-    print(f"  Got {len(portfolio_returns)} trading days")
-    print(f"  Tickers used: {available}")
-    return portfolio_returns, prices[available], norm_weights
+    from src.risk import aligned_returns, portfolio_returns
+    daily_returns, norm_weights, history = aligned_returns(prices, weights)
+    portfolio = portfolio_returns(daily_returns, norm_weights)
+    print(f"  History policy: {history}")
+    return portfolio, prices[norm_weights.index], norm_weights.to_dict()
 
 
-def compute_rolling_sharpe(returns, window=60, rf_daily=RISK_FREE_RATE/252):
+def compute_rolling_sharpe(returns, window=60, rf_daily=(1+RISK_FREE_RATE)**(1/252)-1):
     """
     Rolling Sharpe ratio over `window` trading days.
     Annualised: multiply daily Sharpe by sqrt(252).
@@ -92,24 +73,23 @@ def compute_rolling_sharpe(returns, window=60, rf_daily=RISK_FREE_RATE/252):
     excess = returns - rf_daily
     rolling_mean = excess.rolling(window).mean()
     rolling_std  = returns.rolling(window).std()
-    sharpe = (rolling_mean / rolling_std) * np.sqrt(252)
+    sharpe = (rolling_mean / rolling_std.replace(0, np.nan)) * np.sqrt(252)
     sharpe.name = "rolling_sharpe"
     return sharpe
 
 
-def compute_rolling_sortino(returns, window=60, rf_daily=RISK_FREE_RATE/252):
+def compute_rolling_sortino(returns, window=60, rf_daily=(1+RISK_FREE_RATE)**(1/252)-1):
     """
-    Rolling Sortino: only uses downside deviation (negative returns).
-    Better than Sharpe for portfolios with asymmetric returns.
+    Rolling Sortino: RMS negative excess returns over all window observations.
     """
     excess = returns - rf_daily
 
     def downside_std(x):
-        neg = x[x < 0]
-        return neg.std() if len(neg) > 1 else np.nan
+        downside = np.sqrt(np.mean(np.minimum(x, 0) ** 2))
+        return downside if downside > 0 else np.nan
 
     rolling_mean     = excess.rolling(window).mean()
-    rolling_downside = returns.rolling(window).apply(downside_std, raw=True)
+    rolling_downside = excess.rolling(window).apply(downside_std, raw=True)
     sortino = (rolling_mean / rolling_downside) * np.sqrt(252)
     sortino.name = "rolling_sortino"
     return sortino
@@ -118,8 +98,7 @@ def compute_rolling_sortino(returns, window=60, rf_daily=RISK_FREE_RATE/252):
 def compute_rolling_var(returns, window=60, confidence=0.95):
     """
     Rolling Value at Risk (VaR) at given confidence level.
-    VaR = the worst daily loss you'd expect to NOT exceed on 95% of days.
-    e.g. VaR=-0.05 means on 95% of days, you lose less than 5%.
+    Historical lower return quantile; not a calibrated future loss bound.
     """
     var = returns.rolling(window).quantile(1 - confidence)
     var.name = f"var_{int(confidence*100)}"
@@ -131,7 +110,8 @@ def print_current_stats(returns, sharpe, sortino, var95):
     ann_return = returns.mean() * 252
     ann_vol    = returns.std()  * np.sqrt(252)
     total_ret  = (1 + returns).prod() - 1
-    max_dd     = ((1 + returns).cumprod() / (1 + returns).cumprod().cummax() - 1).min()
+    from src.risk import max_drawdown
+    max_dd = max_drawdown(returns)
     win_rate   = (returns > 0).mean()
 
     current_sharpe  = float(sharpe.iloc[-1])  if not sharpe.isna().all()  else np.nan
@@ -140,7 +120,7 @@ def print_current_stats(returns, sharpe, sortino, var95):
 
     print("\n" + "="*57)
     print("  PORTFOLIO RISK DASHBOARD")
-    print("  (equal-weighted by current market value, 1Y history)")
+    print("  (daily rebalanced at supplied capital weights, 1Y history)")
     print("="*57)
     print(f"  Annual return (approx):   {ann_return:>+8.1%}")
     print(f"  Annual volatility:        {ann_vol:>8.1%}")
@@ -150,21 +130,10 @@ def print_current_stats(returns, sharpe, sortino, var95):
     print(f"─"*57)
     print(f"  Rolling Sharpe  (60d):    {current_sharpe:>8.2f}")
     print(f"  Rolling Sortino (60d):    {current_sortino:>8.2f}")
-    print(f"  VaR 95% (daily):          {current_var:>8.1%}  (worst daily loss on 95% of days)")
+    print(f"  VaR 95% (daily):          {current_var:>8.1%}  (historical 5th percentile, not a loss bound)")
     print("="*57)
 
-    # Interpretation
-    if current_sharpe > 1.0:
-        print("  ✅ Strong risk-adjusted returns (Sharpe > 1)")
-    elif current_sharpe > 0.5:
-        print("  ⚠️  Decent but not great risk-adjusted returns")
-    elif current_sharpe > 0:
-        print("  ⚠️  Positive but weak — you're taking a lot of risk for the return")
-    else:
-        print("  ❌ Negative Sharpe — losing money on a risk-adjusted basis")
-
-    if abs(current_var) > 0.05:
-        print(f"  ⚠️  High daily VaR ({current_var:.1%}) — leveraged ETFs are volatile")
+    print("  Historical rolling estimates; no recommendation or calibrated tail forecast.")
 
 
 def plot_rolling_sharpe(returns, sharpe, sortino, var95, prices, weights):
@@ -205,12 +174,13 @@ def plot_rolling_sharpe(returns, sharpe, sortino, var95, prices, weights):
     axes[2].fill_between(var95.index, var95.values * 100, 0, alpha=0.2, color="#A32D2D")
     axes[2].axhline(-5, color="orange", linestyle="--", alpha=0.5, label="-5% threshold")
     axes[2].set_ylabel("VaR (%)")
-    axes[2].set_title("Rolling 95% VaR — Worst Daily Loss 95% of Time", fontsize=11)
+    axes[2].set_title("Rolling 95% VaR — Historical 5th Percentile (not a loss bound)", fontsize=11)
     axes[2].legend(fontsize=8)
     axes[2].grid(True, alpha=0.25)
 
     # Panel 4: Drawdown
-    dd = (cum_return - cum_return.cummax()) / cum_return.cummax()
+    from src.risk import drawdown_series
+    dd = drawdown_series(returns)
     axes[3].fill_between(dd.index, dd.values * 100, 0, color="#A32D2D", alpha=0.4)
     axes[3].set_ylabel("Drawdown (%)")
     axes[3].set_title("Underwater Curve (% from Peak)", fontsize=11)
