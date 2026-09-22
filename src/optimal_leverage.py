@@ -1,41 +1,12 @@
-"""
-optimal_leverage.py — leveraged-etf-risk-lab
+"""Daily-reset leverage model and historical leverage curves.
 
-Reproduces the "CAGR vs Daily Leverage" curve (the parabola you uploaded) for any
-underlying index, and finds the leverage that HISTORICALLY maximized growth.
-
-THE MATH
---------
-Long-run log-growth of a daily-rebalanced L-times position is approximately
-        g(L) ≈ L·μ − ½·(L·σ)²            (μ, σ = daily mean & stdev of the 1x asset)
-The first term (return) is linear in L; the second — VOLATILITY DRAG — grows with L².
-So growth peaks at the Kelly-optimal leverage
-        L* = μ / σ²
-Higher-volatility assets (NASDAQ vs S&P) get a LOWER optimal leverage, because σ is squared.
-
-This module also SIMULATES the real daily-compounded path (no approximation), which
-captures the actual decay you see in KORU (3x) and your 2x single-stock ETFs.
-
-CAVEATS (put these in your journal):
-  - In-sample / backward-looking. The historical optimum is NOT knowable in advance.
-  - Assumes iid returns; real markets have autocorrelation, fat tails, sequence risk.
-  - Costs matter: LETFs charge ~0.9-1.0% expense + financing on the borrowed portion.
-
-USAGE
------
-    python optimal_leverage.py                 # runs S&P 500 and NASDAQ (mirrors the picture)
-    from optimal_leverage import analyze
-    analyze("Korea (KORU underlying)", "EWY")  # your own holding
+Synthetic model, not fund tracking or a recommendation. See docs/methodology.md.
 """
 
 from __future__ import annotations
 import os
 import numpy as np
 import pandas as pd
-import yfinance as yf
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
 DATA_DIR = "data"
 
@@ -54,25 +25,65 @@ HOLDINGS_UNDERLYING = {
 # ----------------------------------------------------------------------
 def fetch_returns(ticker: str, fetch_fn=None, period: str = "max") -> pd.Series:
     """Daily simple returns of the 1x underlying. Reuses your fetcher if given."""
+    import yfinance as yf
+
     if fetch_fn is not None:
         try:
             s = fetch_fn(ticker, period=period)["Close"].dropna()
             if len(s) > 50:
-                return s.pct_change().dropna()
+                return s.pct_change(fill_method=None).dropna()
         except Exception:
             pass
     s = yf.Ticker(ticker).history(period=period)["Close"].dropna()
-    return s.pct_change().dropna()
+    return s.pct_change(fill_method=None).dropna()
+
+
+def simulate_daily_reset(returns, leverage=3.0, annual_fee=0.0095,
+                         annual_financing=0.04, periods=252, invalid_policy="raise"):
+    """Model NAV reset daily; fee on NAV, financing on max(L-1,0).
+
+    A modeled loss >=100% either raises or liquidates irreversibly at zero.
+    Nonfinite inputs and underlying returns below -100% always raise.
+    """
+    r = np.asarray(returns, dtype=float)
+    parameters = [leverage, annual_fee, annual_financing, periods]
+    if (r.ndim != 1 or not len(r) or not np.isfinite(r).all() or (r < -1).any()
+            or not np.isfinite(parameters).all() or min(parameters[:3]) < 0 or periods <= 0):
+        raise ValueError("Invalid returns, leverage, costs or annualization")
+    if invalid_policy not in ("raise", "liquidate"):
+        raise ValueError("invalid_policy must be raise or liquidate")
+    cost = (annual_fee + max(leverage - 1, 0) * annual_financing) / periods
+    raw = leverage * r - cost
+    wealth = [1.0]
+    realized = []
+    exhausted_at = None
+    for day, value in enumerate(raw):
+        if exhausted_at is not None:
+            realized.append(0.0)  # no exposure after liquidation
+            wealth.append(0.0)
+            continue
+        if value <= -1:
+            if invalid_policy == "raise":
+                raise ValueError(f"Modeled loss reaches 100% at observation {day}")
+            exhausted_at = day
+            value = -1.0
+        realized.append(float(value))
+        wealth.append(wealth[-1] * (1 + value))
+    if not np.isfinite(wealth).all():
+        raise ValueError("Modeled wealth overflow")
+    return {"model": "synthetic daily-reset NAV", "leverage": leverage,
+            "annual_fee": annual_fee, "annual_financing": annual_financing,
+            "periods": periods, "daily_cost": cost, "invalid_policy": invalid_policy,
+            "underlying_returns": r.tolist(), "fund_returns": realized,
+            "wealth": wealth, "total_return": wealth[-1] - 1,
+            "exhausted_at": exhausted_at}
 
 
 def lev_cagr(r: pd.Series, L: float, ann_fee: float = 0.0095,
              ann_fin: float = 0.04) -> float:
-    """CAGR of a daily-rebalanced L-times position, net of fees + financing.
-    Simulates the actual compounded path (captures decay exactly)."""
-    daily = L * r - L * ann_fee / 252 - max(L - 1.0, 0.0) * ann_fin / 252
-    growth = float((1.0 + daily).prod())
-    yrs = len(r) / 252.0
-    return growth ** (1.0 / yrs) - 1.0 if growth > 0 else -1.0
+    """Historical model CAGR; shares the simulator's cost and liquidation rules."""
+    result = simulate_daily_reset(r, L, ann_fee, ann_fin, invalid_policy="liquidate")
+    return result["wealth"][-1] ** (252 / len(r)) - 1
 
 
 def vol_drag(L: float, sigma_daily: float) -> float:
@@ -82,7 +93,7 @@ def vol_drag(L: float, sigma_daily: float) -> float:
 
 def kelly_optimal(r: pd.Series) -> float:
     """Closed-form growth-optimal leverage L* = mean / variance (daily)."""
-    return float(r.mean() / r.var())
+    return float(r.mean() / r.var()) if len(r) >= 2 and r.var() > 0 else np.nan
 
 
 def leverage_curve(r: pd.Series, Lmax: float = 4.0, n: int = 41, **costs):
@@ -110,10 +121,13 @@ def analyze(name: str, ticker: str, fetch_fn=None, save: bool = True, **costs) -
     print("  " + "-" * 36)
     print(f"  Empirical peak (simulated, net of cost): {peak_L:.2f}x")
     print(f"  Kelly closed-form  L* = mean/var       : {Lstar:.2f}x")
-    print(f"  -> Above this, more leverage LOWERS long-run growth (decay wins).")
+    print(f"  -> In-sample model peak only; not a future optimum.")
     print("=" * 60)
 
     if save:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
         os.makedirs(DATA_DIR, exist_ok=True)
         plt.figure(figsize=(6, 4))
         plt.plot(Ls, cagr * 100, lw=2.5, color="navy")

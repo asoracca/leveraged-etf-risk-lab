@@ -9,9 +9,6 @@ This answers:
 
 from pathlib import Path
 import pandas as pd
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
 from src.data import fetch_price_history
 from src.holdings import load_weights
@@ -31,6 +28,27 @@ THEME_BUCKETS = {
     "NBIG": "AI infrastructure",
     "LITX": "Lithium / materials",
 }
+
+
+def look_through_exposure(weights, exposures):
+    """Aggregate explicitly supplied factor notionals per unit capital.
+
+    Maps are assumptions, not inferred from names. Overlapping factor categories
+    need not sum to gross exposure; the caller defines them.
+    """
+    import numpy as np
+    w = normalize_weights(weights)
+    if not set(w.index).issubset(exposures):
+        raise ValueError("Missing exposure mapping")
+    result = {}
+    for ticker, weight in w.items():
+        if not exposures[ticker]:
+            raise ValueError("Empty exposure mapping")
+        for factor, multiple in exposures[ticker].items():
+            if not np.isfinite(multiple):
+                raise ValueError("Nonfinite exposure")
+            result[factor] = result.get(factor, 0.0) + weight * multiple
+    return result
 
 
 def compute_theme_exposure(prices, weights=None):
@@ -88,6 +106,9 @@ def print_theme_exposure(prices, weights=None):
 
 
 def plot_theme_exposure(prices, weights=None):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
     _, theme_df = compute_theme_exposure(prices, weights)
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))

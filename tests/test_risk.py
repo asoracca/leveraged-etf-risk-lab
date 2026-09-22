@@ -55,6 +55,14 @@ class RiskTests(unittest.TestCase):
         self.assertTrue(np.isnan(s['sharpe']) and np.isnan(rc['A']))
         self.assertTrue(np.isnan(s['betas']['SPY']))
 
+    def test_constant_nonzero_return_and_hedged_zero_risk(self):
+        r = pd.DataFrame({'A': [.1, .1, .1]})
+        self.assertEqual(component_risk(r, {'A': 1})['A'], 0)
+        self.assertTrue(np.isnan(beta_to_benchmark(r['A'], r['A'])))
+        hedge = pd.DataFrame({'A': [.1, -.1, .1], 'B': [-.1, .1, -.1]})
+        self.assertEqual(component_risk(hedge, {'A': .5, 'B': .5}).sum(), 0)
+        self.assertTrue(risk_contribution(hedge, {'A': .5, 'B': .5}).isna().all())
+
     def test_identical_assets(self):
         r = pd.DataFrame({'A': [.1, -.1, .1], 'B': [.1, -.1, .1]})
         w = {'A': .25, 'B': .75}

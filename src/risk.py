@@ -9,7 +9,7 @@ from src.config import BENCHMARKS, DEFAULT_WEIGHTS, THEMES, TICKERS
 def normalize_weights(weights=None, available=None) -> pd.Series:
     """Normalize finite long-only capital weights; never silently drop a holding."""
     w = pd.Series(DEFAULT_WEIGHTS if weights is None else weights, dtype=float)
-    if w.empty or not w.index.is_unique or not np.isfinite(w).all() or (w < 0).any() or w.sum() <= 0:
+    if w.empty or not w.index.is_unique or not np.isfinite(w).all() or (w < 0).any() or not np.isfinite(w.sum()) or w.sum() <= 0:
         raise ValueError("Weights must be finite, nonnegative, unique and have positive total")
     w = w[w > 0]
     if available is not None and not w.index.isin(available).all():
@@ -92,7 +92,7 @@ def beta_to_benchmark(asset_returns, benchmark_returns):
     aligned = pd.concat([asset_returns, benchmark_returns], axis=1).dropna()
     if len(aligned) < 2 or not np.isfinite(aligned.to_numpy()).all():
         return np.nan
-    variance = aligned.iloc[:, 1].var(ddof=1)
+    variance = aligned.iloc[:, 1].var(ddof=1) if aligned.iloc[:, 1].nunique() > 1 else 0.0
     return float(aligned.iloc[:, 0].cov(aligned.iloc[:, 1]) / variance) if variance > 0 else np.nan
 
 
@@ -102,7 +102,7 @@ def component_risk(returns, weights=None, mode="constant_weight", periods=252):
         raise ValueError("periods must be positive")
     pnl = portfolio_pnl(returns, weights, mode)
     port = pnl.sum(axis=1)
-    vol = float(port.std(ddof=1) * np.sqrt(periods))
+    vol = float(port.std(ddof=1) * np.sqrt(periods)) if port.nunique() > 1 else 0.0
     if vol == 0:
         return pd.Series(0.0, index=pnl.columns)
     return pnl.apply(lambda x: x.cov(port) * periods / vol)
@@ -120,7 +120,7 @@ def compute_summary(prices, weights=None, *, mode="constant_weight", missing_pol
         raise ValueError("Invalid annualization or effective annual risk-free rate")
     returns, w, history = aligned_returns(prices, weights, missing_policy)
     port = portfolio_returns(returns, w, mode)
-    vol = float(port.std(ddof=1) * np.sqrt(periods))
+    vol = float(port.std(ddof=1) * np.sqrt(periods)) if port.nunique() > 1 else 0.0
     daily_rf = np.expm1(np.log1p(risk_free_rate) / periods)
     components = component_risk(returns, w, mode, periods)
     shares = components / vol if vol > 0 else components * np.nan
